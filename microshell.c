@@ -36,6 +36,10 @@ size_t ft_strlen(char *s) {
   return i;
 }
 
+void print_error(char *s) {
+  write(STDERR, s, ft_strlen(s));
+}
+
 char *ft_strdup(char *s) {
   char *copy = (char*)malloc(sizeof(char) * (ft_strlen(s) + 1));
   size_t i = 0;
@@ -141,7 +145,7 @@ int exec_cmd(t_list *cmd, char **env) {
       return EXIT_FAILURE;
     }
   }
-//  pid = fork();
+  pid = fork();
   if (pid < 0) {
     return EXIT_FAILURE;
   }
@@ -168,26 +172,55 @@ int exec_cmd(t_list *cmd, char **env) {
     if (cmd->prev || cmd->type == TYPE_BREAK) {
       close(cmd->prev->pipes[SIDE_OUT]);
     }
-    if (WIFEXITED(status)) {
-      ret = WEXITSTATUS(status);
+  }
+  if (cmd->prev && cmd->prev->type == TYPE_PIPE) {
+    close(cmd->prev->pipes[SIDE_OUT]);
+  }
+  if (WIFEXITED(status)) {
+    ret = WEXITSTATUS(status);
+  }
+  return ret;
+}
+
+int exec_cmds(t_list **cmds, char **env) {
+  t_list *current = *cmds;
+  int ret = EXIT_SUCCESS;
+
+
+  while (current) {
+    if (strcmp("cd", current->args[0]) == 0) {
+      ret = EXIT_SUCCESS;
+      if (current->length < 2) {
+        print_error("error: cd: bad arguments\n");
+        return EXIT_FAILURE;
+      }
+      if (chdir(current->args[1])) {
+        print_error("error: cd: cannot change directory to ");
+        print_error(current->args[1]);
+        print_error("\n");
+        return EXIT_FAILURE;
+      }
+    } else {
+      ret = exec_cmd(current, env);
     }
+    current = current->next;
   }
   return ret;
 }
 
 int main(int argc, char **argv, char **env) {
-  t_list *cmd = NULL;
+  t_list *cmds = NULL;
   int ret;
   int i;
 
   i = 1;
   while (i < argc) {
-    parse_arg(&cmd, argv[i]);
+    parse_arg(&cmds, argv[i]);
     ++i;
   }
-  if (cmd) {
-    ret = exec_cmd(cmd, env);
+  if (cmds) {
+    ret = exec_cmds(&cmds, env);
   }
-  list_clear(&cmd);
+  list_clear(&cmds);
   return ret;
 }
